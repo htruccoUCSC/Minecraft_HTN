@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# Logs
+log.txt
+*.log
+*.docx
+
+# macOS
+.DS_Store
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Virtual environments (in case you create one)
+venv/
+env/
+ENV/
+
+# Project specific
+
+travel.py
