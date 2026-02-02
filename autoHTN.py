@@ -22,34 +22,38 @@ def make_method(name, rule):
 	requires = rule.get('Requires', {})
 	consumes = rule.get('Consumes', {})
 	time = rule.get('Time', 0)
-	def method(state, ID):
-		
-    # 1. If this recipe does not help achieve ID, fail
-		if ID not in produces:
+	def method(state, ID, item, amount):
+		if getattr(state, item)[ID] >= amount:
+			return []
+		if item not in produces:
+			#print("1")
 			return False
-    # 2. Check if required tools exist
+    # 1. Check if required tools exist
        # if not, planner will need subgoals for them
 		subgoals = []
-		for tool, amount in requires.items():
-			if state.get(tool, 0) < amount:
-				subgoals.append(("get", tool))
-    # 3. Check if required items exist
+		for tool, needed in requires.items():
+			if getattr(state, tool)[ID] < needed:
+				subgoals.append(('have_enough', ID, tool, needed))
+				#print("2", subgoals)
+    # 2. Check if required items exist
        # if not, planner will need subgoals for them
-		for item, amount in consumes.items():
-			if state.get(item, 0) < amount:
-				subgoals.append(("get", item))
-    # 4. Check time constraints
-		if state.time < time:
+		for res, needed in consumes.items():
+			if getattr(state, res)[ID] < needed:
+				subgoals.append(('have_enough', ID, res, needed))
+				#print("3", subgoals)
+    # 3. Check time constraints
+		if state.time[ID] < time:
 			return False
-    # 5. Apply recipe
-		subgoals.append(("apply", name))
+    # 4. Apply recipe
+		subgoals.append(('op_' + name.replace(" ", "_"), ID))
+		
 		return subgoals
 		#state: current inventory, time, tools owned
 		#ID: task or goal identifier or resource being planned for
 
 		# your code here
 		
-	method.__name__ = name.replace(" ", "_")
+	method.__name__ = "produce_" + name.replace(" ", "_")
 	return method
 
 def declare_methods(data):
@@ -67,15 +71,14 @@ def declare_methods(data):
 		key=lambda r: r[1].get("Time", 0)
 	)
 
-	methods_by_product = {}
+	methods = []
+
 	for name, rule in sorted_recipes:
 		method = make_method(name, rule)
-
-		for product in rule.get("Produces", {}):
-			methods_by_product.setdefault(product, []).append(method)
-
-	for product, methods in methods_by_product.items():
-		pyhop.declare_methods(product, *methods)
+		method.__name__ = "produce_" + name.replace(" ", "_")
+		methods.append(method)
+	
+	pyhop.declare_methods('have_enough', *methods)
 				
 
 def make_operator(rule):
@@ -133,6 +136,21 @@ def add_heuristic(data, ID):
 	# e.g. def heuristic2(...); pyhop.add_check(heuristic2)
 	def heuristic(state, curr_task, tasks, plan, depth, calling_stack):
 		# your code here
+		#infinite loop
+		#if curr_task in calling_stack:
+		#	return True
+		if state.time[ID] < 0:
+			return True
+		
+		if calling_stack.count(curr_task) > 2:
+			return True
+		
+		#takes too long
+		if depth > 200:
+			return True
+		#checking time
+		
+
 		return False # if True, prune this branch
 
 	pyhop.add_check(heuristic)
@@ -141,7 +159,36 @@ def define_ordering(data, ID):
 	# if needed, use the function below to return a different ordering for the methods
 	# note that this should always return the same methods, in a new order, and should not add/remove any new ones
 	def reorder_methods(state, curr_task, tasks, plan, depth, calling_stack, methods):
-		return methods
+		#state: what you have
+		#curr_task: task currently being decomposed ex.) "wood", "plank", "iron_pickaxe"
+		#tasks: tasks still to be planned ^^
+		#plan: the history, what have you committed to, what tools youre gonna make, what actions youve already chosen
+		#depth: how deep you are in the decomposition tree
+		#calling_stack: chain of tasks that led here, can detect: "cycles", "infinite recursion", "im trying to make X bc i need X"
+		#methods: list of candidiate methods for this task
+		#1.) can this method be applied now?
+		checked = []
+		for method in methods:
+			recipe_name = method.__name__.replace("_", " ")
+			rule = data["Recipes"].get(recipe_name, {})
+
+			requires = rule.get("Requires", {})
+			consumes = rule.get("Consumes", {})
+			time = rule.get("Time", 0)
+
+			missing = 0
+
+			for item, amt in requires.items():
+				if state.get(item, 0) < amt:
+					missing += 1
+			
+			for item, amt in consumes.items():
+				if state.get(item, 0) < amt:
+					missing += 1
+			
+		checked.append((missing, time, method))
+		checked.sort()
+		return [m for _, _, m in checked]
 	
 	pyhop.define_ordering(reorder_methods)
 
@@ -185,12 +232,13 @@ if __name__ == '__main__':
 	define_ordering(data, 'agent')
 
 	pyhop.print_operators()
-	# pyhop.print_methods()
-	#for recipe_name, recipe_data in data["Recipes"].items():
-	#	print(recipe_name)
-	#	print(recipe_data)
+	pyhop.print_methods()
 
 	# Hint: verbose output can take a long time even if the solution is correct; 
 	# try verbose=1 if it is taking too long
-	# pyhop.pyhop(state, goals, verbose=1)
-	# pyhop.pyhop(state, [('have_enough', 'agent', 'cart', 1),('have_enough', 'agent', 'rail', 20)], verbose=3)
+	#pyhop.pyhop(state, goals, verbose=1)
+	#pyhop.pyhop(state, [('have_enough', 'agent', 'cart', 1),('have_enough', 'agent', 'rail', 20)], verbose=3)
+	#pyhop.pyhop(state,[('have_enough', 'agent', 'plank', 1)], verbose = 1)
+	#pyhop.pyhop(state, [('have_enough', 'agent', 'wooden_pickaxe', 1)], verbose = 1)
+	#pyhop.pyhop(state, [('have_enough', 'agent', 'iron_pickaxe', 1)], verbose = 1)
+	pyhop.pyhop(state, [('have_enough', 'agent', 'cart', 1), ('have_enough', 'agent', 'rail', 10)], verbose=2)
