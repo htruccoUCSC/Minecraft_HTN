@@ -16,10 +16,40 @@ def produce(state, ID, item):
 pyhop.declare_methods('produce', produce)
 
 def make_method(name, rule):
+	#name: ex.) 'craft wooden axe at bench' or 'punch for wood'
+	#rule: says what method produces, requires, consumes, and time
+	produces = rule.get('Produces', {})
+	requires = rule.get('Requires', {})
+	consumes = rule.get('Consumes', {})
+	time = rule.get('Time', 0)
 	def method(state, ID):
-		# your code here
-		pass
+		
+    # 1. If this recipe does not help achieve ID, fail
+		if ID not in produces:
+			return False
+    # 2. Check if required tools exist
+       # if not, planner will need subgoals for them
+		subgoals = []
+		for tool, amount in requires.items():
+			if state.get(tool, 0) < amount:
+				subgoals.append(("get", tool))
+    # 3. Check if required items exist
+       # if not, planner will need subgoals for them
+		for item, amount in consumes.items():
+			if state.get(item, 0) < amount:
+				subgoals.append(("get", item))
+    # 4. Check time constraints
+		if state.time < time:
+			return False
+    # 5. Apply recipe
+		subgoals.append(("apply", name))
+		return subgoals
+		#state: current inventory, time, tools owned
+		#ID: task or goal identifier or resource being planned for
 
+		# your code here
+		
+	method.__name__ = name.replace(" ", "_")
 	return method
 
 def declare_methods(data):
@@ -28,7 +58,25 @@ def declare_methods(data):
 
 	# your code here
 	# hint: call make_method, then declare the method to pyhop using pyhop.declare_methods('foo', m1, m2, ..., mk)	
-	pass			
+
+	recipes = data["Recipes"]
+
+	#sort by time
+	sorted_recipes = sorted(
+		recipes.items(),
+		key=lambda r: r[1].get("Time", 0)
+	)
+
+	methods_by_product = {}
+	for name, rule in sorted_recipes:
+		method = make_method(name, rule)
+
+		for product in rule.get("Produces", {}):
+			methods_by_product.setdefault(product, []).append(method)
+
+	for product, methods in methods_by_product.items():
+		pyhop.declare_methods(product, *methods)
+				
 
 def make_operator(rule):
 	def operator(state, ID):
@@ -100,6 +148,9 @@ if __name__ == '__main__':
 
 	# pyhop.print_operators()
 	# pyhop.print_methods()
+	for recipe_name, recipe_data in data["Recipes"].items():
+		print(recipe_name)
+		print(recipe_data)
 
 	# Hint: verbose output can take a long time even if the solution is correct; 
 	# try verbose=1 if it is taking too long
