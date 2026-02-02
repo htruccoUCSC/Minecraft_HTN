@@ -79,15 +79,53 @@ def declare_methods(data):
 				
 
 def make_operator(rule):
+	produces = rule.get('Produces', {})
+	requires = rule.get('Requires', {})
+	consumes = rule.get('Consumes', {})
+	time = rule.get('Time', 0)
+	
 	def operator(state, ID):
-		# your code here
-		pass
+		# Check if we have required tools
+		for tool, amount in requires.items():
+			if getattr(state, tool)[ID] < amount:
+				return False
+		
+		# Check if we have items to consume
+		for item, amount in consumes.items():
+			if getattr(state, item)[ID] < amount:
+				return False
+		
+		# Check if we have enough time
+		if state.time[ID] < time:
+			return False
+		
+		# Apply the recipe: consume items, produce items, use time
+		for item, amount in consumes.items():
+			current = getattr(state, item)[ID]
+			getattr(state, item)[ID] = current - amount
+		
+		for item, amount in produces.items():
+			current = getattr(state, item)[ID]
+			getattr(state, item)[ID] = current + amount
+		
+		state.time[ID] -= time
+		
+		return state
+	
 	return operator
 
 def declare_operators(data):
 	# your code here
 	# hint: call make_operator, then declare the operator to pyhop using pyhop.declare_operators(o1, o2, ..., ok)
-	pass
+	recipes = data["Recipes"]
+	
+	operators = []
+	for name, rule in recipes.items():
+		operator = make_operator(rule)
+		operator.__name__ = "op_" + name.replace(" ", "_")
+		operators.append(operator)
+	
+	pyhop.declare_operators(*operators)
 
 def add_heuristic(data, ID):
 	# prune search branch if heuristic() returns True
@@ -146,13 +184,13 @@ if __name__ == '__main__':
 	add_heuristic(data, 'agent')
 	define_ordering(data, 'agent')
 
-	# pyhop.print_operators()
+	pyhop.print_operators()
 	# pyhop.print_methods()
-	for recipe_name, recipe_data in data["Recipes"].items():
-		print(recipe_name)
-		print(recipe_data)
+	#for recipe_name, recipe_data in data["Recipes"].items():
+	#	print(recipe_name)
+	#	print(recipe_data)
 
 	# Hint: verbose output can take a long time even if the solution is correct; 
 	# try verbose=1 if it is taking too long
-	pyhop.pyhop(state, goals, verbose=1)
+	# pyhop.pyhop(state, goals, verbose=1)
 	# pyhop.pyhop(state, [('have_enough', 'agent', 'cart', 1),('have_enough', 'agent', 'rail', 20)], verbose=3)
