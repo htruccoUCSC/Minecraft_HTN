@@ -168,7 +168,7 @@ def add_heuristic(data, ID):
 	def prune_unnecessary_iron_axe(state, curr_task, tasks, plan, depth, calling_stack):
 		"""
 		Don't craft iron_axe unless it's explicitly required as a goal.
-		Iron axes are expensive and rarely worth making just for chopping wood faster.
+		It's identical to the stone_axe but takes more time to make
 		"""
 		if is_producing_item(curr_task, 'iron_axe'):
 			if 'iron_axe' not in goal_items:
